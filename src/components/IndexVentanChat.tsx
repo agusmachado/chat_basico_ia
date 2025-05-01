@@ -4,6 +4,10 @@ import { minLength, object, pipe, string } from "valibot"
 import { useChatStore } from "../store/useChatStore"
 import { useEffect, useRef, useState } from "react"
 import { consultarIA } from "../lib/consultarIA"
+import AdjuntarArchivo from "./AdjuntarArchivo"
+import { LIMITE_TEXTO } from "../config/limites"
+import { Link, useLocation } from "react-router-dom"
+import MenuDescargaMensajes from "./MenuDescargaMensajes"
 
 // - Esquema de validación con Valibot
 const schema = object({
@@ -20,6 +24,10 @@ export default function IndexVentanChat() {
     const mensajes = useChatStore((state) => state.mensajes)
     const agregarMensaje = useChatStore((state) => state.agregarMensaje)
 
+    // En qué ruta estamos
+    const location = useLocation()
+    const enDocumentos = location.pathname === "/documentos"
+
     // React-Hook-Forma
    const {
     register,
@@ -34,17 +42,25 @@ const [cargando, setCargando ] = useState(false)
 
 const scrollRef = useRef<HTMLDivElement | null>(null)
 
-   const manejarEnvio = async (entrada: string) => {
+   const manejarEnvio = async (
+        entrada: string | {texto:string; esArchivo?: boolean}
+) => {
+    // Creamos un ternario para definir si el texto que se pasa al modelo de IA es del usuario o de un archivo
+    const texto = typeof entrada === "string" ? entrada : entrada.texto
+
+    // Comprobamos si la entrada es un objeto y si viene marcada como archivo
+    const esArchivo = typeof entrada === "object" && entrada.esArchivo
+
     agregarMensaje({
         id: Date.now(),
         rol: "usuario",
-        texto: entrada
+        texto
     })
     setCargando(true)
     try {
         const respuesta = await consultarIA({
-            soloUsuario: entrada,
-            incluirHistorial: true
+            soloUsuario: texto.slice(0, LIMITE_TEXTO),
+            incluirHistorial: !esArchivo
         })
         agregarMensaje({
             id: Date.now() + 1,
@@ -52,7 +68,14 @@ const scrollRef = useRef<HTMLDivElement | null>(null)
             texto: respuesta
         })
     } catch (error) {
-       console.error(error) 
+       console.error("Error al consultar la IA: ",error) 
+
+       agregarMensaje({
+        id: Date.now() + 2,
+        rol: "bot",
+        texto: "Ocurrió un error al analizar el archivo"
+       })
+
     } finally {
         setCargando(false)
     }
@@ -66,10 +89,15 @@ const scrollRef = useRef<HTMLDivElement | null>(null)
     <div className="flex flex-col h-screen bg-zinc-900 text-white">
         <header className="bg-zinc-800 px-4 py-3 flex justify-between items-center shadow-md">
             <h1 className="text-xl font-semibold">Este el el CHAT - IA</h1>
+            <Link
+                to={enDocumentos ? "/" : "/documentos"}
+                className="text-sm bg-zinc-700 hover:bg-zinc-600 px-3 py-1 rounded"
+            >
+                {enDocumentos ? "Volver al Chat" : "Ver Documentos"}
+            </Link>
         </header>
-        <main className="flex-1 grid grid-cols-3 gap-4 py-6 overflow-y-auto">
-            <div/>
-            <div className="flex flex-col space-y-4">
+        <main className="flex-1 flex justify-center px-4 py-6 overflow-y-auto">
+            <div className="w-full max-w-3xl flex flex-col space-y-4">
                 {mensajes.map((mensaje) => (
                 <div
                    key={mensaje.id} 
@@ -77,10 +105,15 @@ const scrollRef = useRef<HTMLDivElement | null>(null)
                     ${mensaje.rol === "usuario" ? "justify-end" : "justify-start"}`}
                 >
                     <div
-                        className={`w-fit max-w-[95%] px-4 py-2 rounded-xl shadow
+                        className={`w-fit max-w-[90%] px-4 py-2 rounded-xl shadow whitespace-pre-line
                             ${mensaje.rol === "usuario" ? "bg-zinc-500" : "bg-zinc-700"}`}
                     >
                         {mensaje.texto}
+                        {mensaje.rol == "bot" && (
+                            <div className="mt-2">
+                                <MenuDescargaMensajes contenido={mensaje.texto} />
+                            </div>
+                        )}
                     </div>
                     
                 </div> 
@@ -117,6 +150,7 @@ const scrollRef = useRef<HTMLDivElement | null>(null)
             {errors.texto && (
                 <p className="text-white bg-red-500 text-center">{errors.texto.message}</p>
             )}
+            <AdjuntarArchivo envioTextoExtraido={manejarEnvio}/>
         </footer>
     </div>
   )
