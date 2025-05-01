@@ -7,3 +7,4 @@
 "# chat_basico_ia" 
 "# chat_basico_ia" 
 "# chat_basico_ia" 
+"# chat_archivos_ia" 
